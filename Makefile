@@ -1,4 +1,3 @@
-CC = g++
 PKG_CONFIG = pkg-config
 
 INSTALL := install
@@ -22,7 +21,7 @@ SYS_SCRIPTS_DIR := /etc/mpv/scripts
   clean
 
 kde-night-color.so: kde-night-color.c
-	$(CC) kde-night-color.c -o kde-night-color.so $(CFLAGS) $(LDFLAGS) -shared -fPIC
+	$(CXX) kde-night-color.c -o kde-night-color.so $(CFLAGS) $(LDFLAGS) -shared -fPIC
 
 ifneq ($(shell id -u),0)
 install: install-user
