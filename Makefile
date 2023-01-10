@@ -6,7 +6,7 @@ RMDIR := rmdir
 LN := ln
 RM := rm
 
-CFLAGS += -std=c++11 -Wall -Wextra -O2 `$(PKG_CONFIG) --cflags Qt5DBus mpv`
+CFLAGS += -std=c++11 -Wall -Wextra `$(PKG_CONFIG) --cflags Qt5DBus mpv`
 LDFLAGS += `$(PKG_CONFIG) --libs Qt5DBus`
 
 SCRIPTS_DIR := $(HOME)/.config/mpv/scripts
