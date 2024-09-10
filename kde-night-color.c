@@ -9,8 +9,8 @@
 void inhibit_nc(){
 	QDBusInterface iface(
 		"org.kde.KWin",
-		"/ColorCorrect",
-		"org.kde.kwin.ColorCorrect",
+		"/org/kde/KWin/NightLight",
+		"org.kde.KWin.NightLight",
 		QDBusConnection::sessionBus()
 	);
 
