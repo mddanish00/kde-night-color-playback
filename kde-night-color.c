@@ -34,8 +34,10 @@ extern "C"{
 			int64_t paused = 1, idle = 1;
 			mpv_get_property(handle, "pause", MPV_FORMAT_FLAG, &paused);
 			mpv_get_property(handle, "core-idle", MPV_FORMAT_FLAG, &idle);
+			int64_t seeking = 0;
+			mpv_get_property(handle, "seeking", MPV_FORMAT_FLAG, &seeking);
 
-			bool should_inhibit = !idle && !paused;
+			bool should_inhibit = (seeking || !idle) && !paused;
 			if (should_inhibit != night_light_inhibited) {
 				inhibit_nc(should_inhibit);
 				night_light_inhibited = should_inhibit;
@@ -45,6 +47,8 @@ extern "C"{
 		// Observe pause and idle properties
 		mpv_observe_property(handle, 0, "pause", MPV_FORMAT_FLAG);
 		mpv_observe_property(handle, 0, "core-idle", MPV_FORMAT_FLAG);
+		// Also observe seeking to prevent flicker during jumps
+		mpv_observe_property(handle, 0, "seeking", MPV_FORMAT_FLAG);
 
 		while (true)
 		{
@@ -54,7 +58,7 @@ extern "C"{
 			if (event->event_id == MPV_EVENT_SHUTDOWN) break;
 			if (event->event_id == MPV_EVENT_PROPERTY_CHANGE) {
 				mpv_event_property *prop = (mpv_event_property*)event->data;
-				if (strcmp(prop->name, "pause") == 0 || strcmp(prop->name, "core-idle") == 0) {
+				if (strcmp(prop->name, "pause") == 0 || strcmp(prop->name, "core-idle") == 0 || strcmp(prop->name, "seeking") == 0) {
 					update_inhibition();
 				}
 			}
