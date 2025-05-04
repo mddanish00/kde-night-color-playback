@@ -1,0 +1,32 @@
+name: Test Build Plugin
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Install Dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y build-essential pkg-config qtbase5-dev libmpv-dev
+
+    - name: Build plugin
+      run: make
+
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: plugin
+        path: kde-night-color-playback.so
+        retention-days: 1
