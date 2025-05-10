@@ -50,6 +50,10 @@ extern "C"
 				inhibit_nc(should_inhibit);
 				night_light_inhibited = should_inhibit;
 			}
+
+			// Add logging of current state of pause, core-idle, seeking
+			printf("\nCurrentState= pause: %ld, core-idle: %ld, seeking: %ld, inhibited: %d\n", paused, idle, seeking, night_light_inhibited);
+			fflush(stdout);
 		};
 
 		// Observe pause and idle properties
