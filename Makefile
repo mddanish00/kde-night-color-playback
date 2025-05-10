@@ -25,7 +25,7 @@ SYS_SCRIPTS_DIR := /etc/mpv/scripts
   clean \
   compile_commands
 
-SRC_FILE := kde-night-color.c
+SRC_FILE := kde-night-color.cpp
 TARGET_SO := kde-night-color-playback.so
 
 all: $(TARGET_SO)
