@@ -7,8 +7,8 @@ RMDIR := rmdir
 LN := ln
 RM := rm
 
-_PKG_CFLAGS := $(shell $(PKG_CONFIG) --cflags Qt5DBus mpv)
-_PKG_LDFLAGS := $(shell $(PKG_CONFIG) --libs Qt5DBus)
+_PKG_CFLAGS := $(shell $(PKG_CONFIG) --cflags dbus-1 mpv)
+_PKG_LDFLAGS := $(shell $(PKG_CONFIG) --libs dbus-1)
 CFLAGS += -std=c++11 -Wall -Wextra $(_PKG_CFLAGS)
 LDFLAGS += $(_PKG_LDFLAGS)
 
