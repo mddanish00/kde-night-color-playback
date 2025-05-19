@@ -1,9 +1,9 @@
 #include <stddef.h>
-
+#include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
-#include <QtDBus>
-
+#include <dbus/dbus.h>
 #include <mpv/client.h>
 
 // Added: store inhibition token
@@ -11,21 +11,78 @@ uint night_cookie = 0;
 
 void inhibit_nc(bool inhibit)
 {
-	QDBusInterface iface(
-		"org.kde.KWin",
-		"/org/kde/KWin/NightLight",
-		"org.kde.KWin.NightLight",
-		QDBusConnection::sessionBus());
+	static DBusConnection *conn = nullptr;
+
+	// Connect to session bus once
+	if (!conn)
+	{
+		DBusError err;
+		dbus_error_init(&err);
+		conn = dbus_bus_get(DBUS_BUS_SESSION, &err);
+		if (dbus_error_is_set(&err))
+		{
+			fprintf(stderr, "DBus Connection Error: %s\n", err.message);
+			fflush(stderr);
+			dbus_error_free(&err);
+			return;
+		}
+	}
 
 	if (inhibit)
 	{
-		QDBusReply<uint> reply = iface.call("inhibit");
-		if (reply.isValid())
-			night_cookie = reply.value();
+		DBusMessage *msg, *reply;
+		DBusError err;
+		dbus_error_init(&err);
+
+		msg = dbus_message_new_method_call(
+			"org.kde.KWin",
+			"/org/kde/KWin/NightLight",
+			"org.kde.KWin.NightLight",
+			"inhibit");
+
+		if (!msg)
+			return;
+
+		reply = dbus_connection_send_with_reply_and_block(conn, msg, -1, &err);
+		dbus_message_unref(msg);
+
+		if (dbus_error_is_set(&err))
+		{
+			fprintf(stderr, "DBus Call Error: %s\n", err.message);
+			fflush(stderr);
+			dbus_error_free(&err);
+			return;
+		}
+
+		uint32_t cookie = 0;
+		if (dbus_message_get_args(reply, &err, DBUS_TYPE_UINT32, &cookie, DBUS_TYPE_INVALID))
+		{
+			night_cookie = cookie;
+		}
+		else
+		{
+			fprintf(stderr, "DBus Reply Error: %s\n", err.message);
+			fflush(stderr);
+			dbus_error_free(&err);
+		}
+		dbus_message_unref(reply);
 	}
 	else if (night_cookie != 0)
 	{
-		iface.call("uninhibit", night_cookie);
+		DBusMessage *msg;
+		msg = dbus_message_new_method_call(
+			"org.kde.KWin",
+			"/org/kde/KWin/NightLight",
+			"org.kde.KWin.NightLight",
+			"uninhibit");
+
+		if (!msg)
+			return;
+
+		dbus_message_append_args(msg, DBUS_TYPE_UINT32, &night_cookie, DBUS_TYPE_INVALID);
+		dbus_connection_send(conn, msg, nullptr);
+		dbus_message_unref(msg);
+
 		night_cookie = 0;
 	}
 }
@@ -53,7 +110,7 @@ extern "C"
 
 			// Add logging of current state
 			printf("\nCurrentState= pause: %ld, core-idle: %ld, seeking: %ld, paused-for-cache: %ld, inhibited: %d\n",
-				paused, idle, seeking, paused_for_cache, night_light_inhibited);
+				   paused, idle, seeking, paused_for_cache, night_light_inhibited);
 			fflush(stdout);
 		};
 
