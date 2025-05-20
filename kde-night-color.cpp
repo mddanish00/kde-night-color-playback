@@ -14,6 +14,7 @@ const char *KWIN_INTERFACE = "org.kde.KWin.NightLight";
 // Global variables
 uint32_t night_cookie = 0;
 static DBusConnection *g_dbus_conn = nullptr;
+const int DBUS_TIMEOUT_MS = 5000;
 
 void inhibit_nc(bool inhibit)
 {
@@ -25,7 +26,7 @@ void inhibit_nc(bool inhibit)
 		g_dbus_conn = dbus_bus_get(DBUS_BUS_SESSION, &err);
 		if (dbus_error_is_set(&err))
 		{
-			fprintf(stderr, "DBus Connection Error: %s\n", err.message);
+			fprintf(stderr, "[kde-night-color-playback] DBus Connection Error: %s\n", err.message);
 			dbus_error_free(&err);
 			return;
 		}
@@ -44,14 +45,24 @@ void inhibit_nc(bool inhibit)
 			"inhibit");
 
 		if (!msg)
+		{
+			fprintf(stderr, "[kde-night-color-playback] DBus Message Error: Failed to create inhibit message.\n");
 			return;
+		}
 
-		reply = dbus_connection_send_with_reply_and_block(g_dbus_conn, msg, -1, &err);
+		reply = dbus_connection_send_with_reply_and_block(g_dbus_conn, msg, DBUS_TIMEOUT_MS, &err);
 		dbus_message_unref(msg);
 
 		if (dbus_error_is_set(&err))
 		{
-			fprintf(stderr, "DBus Call Error: %s\n", err.message);
+			if (dbus_error_has_name(&err, DBUS_ERROR_TIMEOUT) || dbus_error_has_name(&err, DBUS_ERROR_NO_REPLY))
+			{
+				fprintf(stderr, "[kde-night-color-playback] DBus Call Error: Timeout waiting for reply from KWin (%s).\n", err.message);
+			}
+			else
+			{
+				fprintf(stderr, "[kde-night-color-playback] DBus Call Error: %s\n", err.message);
+			}
 			dbus_error_free(&err);
 			return;
 		}
@@ -63,7 +74,7 @@ void inhibit_nc(bool inhibit)
 		}
 		else
 		{
-			fprintf(stderr, "DBus Reply Error: %s\n", err.message);
+			fprintf(stderr, "[kde-night-color-playback] DBus Reply Error: %s\n", err.message);
 			dbus_error_free(&err);
 		}
 		dbus_message_unref(reply);
@@ -78,14 +89,23 @@ void inhibit_nc(bool inhibit)
 			"uninhibit");
 
 		if (!msg)
-			return;
-
-		dbus_message_append_args(msg, DBUS_TYPE_UINT32, &night_cookie, DBUS_TYPE_INVALID);
-		if (!dbus_connection_send(g_dbus_conn, msg, nullptr))
 		{
-			fprintf(stderr, "DBus Send Error: Failed to send uninhibit message.\n");
-			// The message is still unref'd and cookie reset below,
-			// as this is a fire-and-forget attempt.
+			fprintf(stderr, "[kde-night-color-playback] DBus Message Error: Failed to create uninhibit message.\n");
+			return;
+		}
+
+		if (dbus_message_append_args(msg, DBUS_TYPE_UINT32, &night_cookie, DBUS_TYPE_INVALID))
+		{
+			if (!dbus_connection_send(g_dbus_conn, msg, nullptr))
+			{
+				fprintf(stderr, "[kde-night-color-playback] DBus Send Error: Failed to send uninhibit message.\n");
+				// The message is still unref'd and cookie reset below,
+				// as this is a fire-and-forget attempt.
+			}
+		}
+		else
+		{
+			fprintf(stderr, "[kde-night-color-playback] DBus Append Args Error: Failed to append arguments for uninhibit. Message not sent.\n");
 		}
 		dbus_message_unref(msg);
 
@@ -124,7 +144,7 @@ extern "C"
 			}
 
 			// Add logging of current state
-			printf("\nCurrentState= pause: %ld, core-idle: %ld, seeking: %ld, paused-for-cache: %ld, inhibited: %d\n",
+			printf("[kde-night-color-playback] CurrentState= pause: %ld, core-idle: %ld, seeking: %ld, paused-for-cache: %ld, inhibited: %d\n",
 				   paused, idle, seeking, paused_for_cache, night_light_inhibited);
 			fflush(stdout);
 		};
