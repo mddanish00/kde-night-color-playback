@@ -76,6 +76,7 @@ void inhibit_nc(bool inhibit)
 		{
 			fprintf(stderr, "[kde-night-color-playback] DBus Reply Error: %s\n", err.message);
 			dbus_error_free(&err);
+			night_cookie = 0; // Explicitly indicate failure to obtain a new cookie
 		}
 		dbus_message_unref(reply);
 	}
@@ -99,8 +100,6 @@ void inhibit_nc(bool inhibit)
 			if (!dbus_connection_send(g_dbus_conn, msg, nullptr))
 			{
 				fprintf(stderr, "[kde-night-color-playback] DBus Send Error: Failed to send uninhibit message.\n");
-				// The message is still unref'd and cookie reset below,
-				// as this is a fire-and-forget attempt.
 			}
 			else
 			{
@@ -132,21 +131,48 @@ extern "C"
 
 		auto update_inhibition = [&]()
 		{
-			int64_t paused = 1, idle = 1, seeking = 0, paused_for_cache = 0;
-			mpv_get_property(handle, "pause", MPV_FORMAT_FLAG, &paused);
-			mpv_get_property(handle, "core-idle", MPV_FORMAT_FLAG, &idle);
-			mpv_get_property(handle, "seeking", MPV_FORMAT_FLAG, &seeking);
-			mpv_get_property(handle, "paused-for-cache", MPV_FORMAT_FLAG, &paused_for_cache);
+			int paused, idle, seeking, paused_for_cache, err;
+
+			err = mpv_get_property(handle, "pause", MPV_FORMAT_FLAG, &paused);
+			if (err != MPV_ERROR_SUCCESS) {
+				fprintf(stderr, "[kde-night-color-playback] Error getting 'pause' property: %s. Skipping update.\n", mpv_error_string(err));
+				return;
+			}
+
+			err = mpv_get_property(handle, "core-idle", MPV_FORMAT_FLAG, &idle);
+			if (err != MPV_ERROR_SUCCESS) {
+				fprintf(stderr, "[kde-night-color-playback] Error getting 'core-idle' property: %s. Skipping update.\n", mpv_error_string(err));
+				return;
+			}
+
+			err = mpv_get_property(handle, "seeking", MPV_FORMAT_FLAG, &seeking);
+			if (err != MPV_ERROR_SUCCESS) {
+				fprintf(stderr, "[kde-night-color-playback] Error getting 'seeking' property: %s. Skipping update.\n", mpv_error_string(err));
+				return;
+			}
+
+			err = mpv_get_property(handle, "paused-for-cache", MPV_FORMAT_FLAG, &paused_for_cache);
+			if (err != MPV_ERROR_SUCCESS) {
+				fprintf(stderr, "[kde-night-color-playback] Error getting 'paused-for-cache' property: %s. Skipping update.\n", mpv_error_string(err));
+				return;
+			}
 
 			bool should_inhibit = (!paused && !idle) || paused_for_cache || seeking;
 			if (should_inhibit != night_light_inhibited)
 			{
 				inhibit_nc(should_inhibit);
+				// Update night_light_inhibited based on the actual outcome of inhibit_nc,
+				// which is reflected by whether night_cookie is non-zero.
+				// If inhibit_nc(true) succeeded, night_cookie is non-zero.
+				// If inhibit_nc(true) failed, night_cookie is zero.
+				// If inhibit_nc(false) succeeded, night_cookie is zero.
+				// If inhibit_nc(false) failed (e.g. send error), night_cookie remains non-zero.
+				// This correctly updates our local state to match what we believe the inhibition state to be.
 				night_light_inhibited = (night_cookie != 0);
 			}
 
 			// Add logging of current state
-			printf("[kde-night-color-playback] CurrentState= pause: %ld, core-idle: %ld, seeking: %ld, paused-for-cache: %ld, inhibited: %d\n",
+			printf("[kde-night-color-playback] CurrentState= pause: %d, core-idle: %d, seeking: %d, paused-for-cache: %d, inhibited: %d\n",
 				   paused, idle, seeking, paused_for_cache, night_light_inhibited);
 			fflush(stdout);
 		};
