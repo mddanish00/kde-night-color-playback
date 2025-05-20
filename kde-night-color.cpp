@@ -102,14 +102,16 @@ void inhibit_nc(bool inhibit)
 				// The message is still unref'd and cookie reset below,
 				// as this is a fire-and-forget attempt.
 			}
+			else
+			{
+				night_cookie = 0;
+			}
 		}
 		else
 		{
 			fprintf(stderr, "[kde-night-color-playback] DBus Append Args Error: Failed to append arguments for uninhibit. Message not sent.\n");
 		}
 		dbus_message_unref(msg);
-
-		night_cookie = 0;
 	}
 }
 
@@ -140,7 +142,7 @@ extern "C"
 			if (should_inhibit != night_light_inhibited)
 			{
 				inhibit_nc(should_inhibit);
-				night_light_inhibited = should_inhibit;
+				night_light_inhibited = (night_cookie != 0);
 			}
 
 			// Add logging of current state
