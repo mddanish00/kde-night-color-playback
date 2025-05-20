@@ -6,23 +6,26 @@
 #include <dbus/dbus.h>
 #include <mpv/client.h>
 
-// Added: store inhibition token
-uint night_cookie = 0;
+// Constants
+const char *KWIN_SERVICE = "org.kde.KWin";
+const char *KWIN_OBJECT_PATH = "/org/kde/KWin/NightLight";
+const char *KWIN_INTERFACE = "org.kde.KWin.NightLight";
+
+// Global variables
+uint32_t night_cookie = 0;
+static DBusConnection *g_dbus_conn = nullptr;
 
 void inhibit_nc(bool inhibit)
 {
-	static DBusConnection *conn = nullptr;
-
 	// Connect to session bus once
-	if (!conn)
+	if (!g_dbus_conn)
 	{
 		DBusError err;
 		dbus_error_init(&err);
-		conn = dbus_bus_get(DBUS_BUS_SESSION, &err);
+		g_dbus_conn = dbus_bus_get(DBUS_BUS_SESSION, &err);
 		if (dbus_error_is_set(&err))
 		{
 			fprintf(stderr, "DBus Connection Error: %s\n", err.message);
-			fflush(stderr);
 			dbus_error_free(&err);
 			return;
 		}
@@ -35,21 +38,20 @@ void inhibit_nc(bool inhibit)
 		dbus_error_init(&err);
 
 		msg = dbus_message_new_method_call(
-			"org.kde.KWin",
-			"/org/kde/KWin/NightLight",
-			"org.kde.KWin.NightLight",
+			KWIN_SERVICE,
+			KWIN_OBJECT_PATH,
+			KWIN_INTERFACE,
 			"inhibit");
 
 		if (!msg)
 			return;
 
-		reply = dbus_connection_send_with_reply_and_block(conn, msg, -1, &err);
+		reply = dbus_connection_send_with_reply_and_block(g_dbus_conn, msg, -1, &err);
 		dbus_message_unref(msg);
 
 		if (dbus_error_is_set(&err))
 		{
 			fprintf(stderr, "DBus Call Error: %s\n", err.message);
-			fflush(stderr);
 			dbus_error_free(&err);
 			return;
 		}
@@ -62,7 +64,6 @@ void inhibit_nc(bool inhibit)
 		else
 		{
 			fprintf(stderr, "DBus Reply Error: %s\n", err.message);
-			fflush(stderr);
 			dbus_error_free(&err);
 		}
 		dbus_message_unref(reply);
@@ -71,19 +72,33 @@ void inhibit_nc(bool inhibit)
 	{
 		DBusMessage *msg;
 		msg = dbus_message_new_method_call(
-			"org.kde.KWin",
-			"/org/kde/KWin/NightLight",
-			"org.kde.KWin.NightLight",
+			KWIN_SERVICE,
+			KWIN_OBJECT_PATH,
+			KWIN_INTERFACE,
 			"uninhibit");
 
 		if (!msg)
 			return;
 
 		dbus_message_append_args(msg, DBUS_TYPE_UINT32, &night_cookie, DBUS_TYPE_INVALID);
-		dbus_connection_send(conn, msg, nullptr);
+		if (!dbus_connection_send(g_dbus_conn, msg, nullptr))
+		{
+			fprintf(stderr, "DBus Send Error: Failed to send uninhibit message.\n");
+			// The message is still unref'd and cookie reset below,
+			// as this is a fire-and-forget attempt.
+		}
 		dbus_message_unref(msg);
 
 		night_cookie = 0;
+	}
+}
+
+void cleanup_dbus_resources()
+{
+	if (g_dbus_conn)
+	{
+		dbus_connection_unref(g_dbus_conn);
+		g_dbus_conn = nullptr;
 	}
 }
 
@@ -140,6 +155,8 @@ extern "C"
 
 		if (night_light_inhibited)
 			inhibit_nc(false);
+
+		cleanup_dbus_resources();
 
 		return 0;
 	}
