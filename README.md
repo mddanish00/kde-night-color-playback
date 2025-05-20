@@ -10,9 +10,22 @@ This plugin only works on Linux while running KDE Plasma, but it could probably 
 
 ## Important Note
 
-This modification is entirely on vibe coding with ChatGPT because I am not C developer. Please check changes yourself if you worried about it. Of cource, I checked, compile and run it on mpv myself.
+This modification is entirely on vibe coding with ChatGPT and Gemini because I am not C developer. Please check changes yourself if you worried about it. Of cource, I checked, compile and run it on mpv myself. I use the plugin myself daily.
 
 ## Build
+
+You need `libdbus-1` and `libmpv` to build this plugin.
+
+### For Ubuntu and Debian
+
+```
+sudo apt install libdbus-1-dev libmpv-dev
+```
+
+### For Arch Linux
+```
+sudo pacman -S libdbus mpv
+```
 
 Run `make`, the included Makefile should do the rest.
 
