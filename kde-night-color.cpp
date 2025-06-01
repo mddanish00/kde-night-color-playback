@@ -2,9 +2,35 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdarg.h>
 
 #include <dbus/dbus.h>
 #include <mpv/client.h>
+
+// Logging helper
+const char *LOG_PREFIX = "[kde-night-color-playback] ";
+
+enum class LogLevel
+{
+	INFO,
+	ERROR
+};
+
+static void log_message(LogLevel level, const char *format, ...)
+{
+	FILE *output_stream = (level == LogLevel::INFO) ? stdout : stderr;
+	fprintf(output_stream, "%s", LOG_PREFIX);
+
+	va_list args;
+	va_start(args, format);
+	vfprintf(output_stream, format, args);
+	va_end(args);
+
+	if (level == LogLevel::INFO)
+	{
+		fflush(output_stream); // Ensure info messages are flushed, similar to previous fflush(stdout)
+	}
+}
 
 // Constants
 const char *KWIN_SERVICE = "org.kde.KWin";
@@ -26,7 +52,7 @@ void inhibit_nc(bool inhibit)
 		g_dbus_conn = dbus_bus_get(DBUS_BUS_SESSION, &err);
 		if (dbus_error_is_set(&err))
 		{
-			fprintf(stderr, "[kde-night-color-playback] DBus Connection Error: %s\n", err.message);
+			log_message(LogLevel::ERROR, "DBus Connection Error: %s\n", err.message);
 			dbus_error_free(&err);
 			return;
 		}
@@ -46,7 +72,7 @@ void inhibit_nc(bool inhibit)
 
 		if (!msg)
 		{
-			fprintf(stderr, "[kde-night-color-playback] DBus Message Error: Failed to create inhibit message.\n");
+			log_message(LogLevel::ERROR, "DBus Message Error: Failed to create inhibit message.\n");
 			return;
 		}
 
@@ -57,11 +83,11 @@ void inhibit_nc(bool inhibit)
 		{
 			if (dbus_error_has_name(&err, DBUS_ERROR_TIMEOUT) || dbus_error_has_name(&err, DBUS_ERROR_NO_REPLY))
 			{
-				fprintf(stderr, "[kde-night-color-playback] DBus Call Error: Timeout waiting for reply from KWin (%s).\n", err.message);
+				log_message(LogLevel::ERROR, "DBus Call Error: Timeout waiting for reply from KWin (%s).\n", err.message);
 			}
 			else
 			{
-				fprintf(stderr, "[kde-night-color-playback] DBus Call Error: %s\n", err.message);
+				log_message(LogLevel::ERROR, "DBus Call Error: %s\n", err.message);
 			}
 			dbus_error_free(&err);
 			return;
@@ -74,7 +100,7 @@ void inhibit_nc(bool inhibit)
 		}
 		else
 		{
-			fprintf(stderr, "[kde-night-color-playback] DBus Reply Error: %s\n", err.message);
+			log_message(LogLevel::ERROR, "DBus Reply Error: %s\n", err.message);
 			dbus_error_free(&err);
 			night_cookie = 0; // Explicitly indicate failure to obtain a new cookie
 		}
@@ -91,7 +117,7 @@ void inhibit_nc(bool inhibit)
 
 		if (!msg)
 		{
-			fprintf(stderr, "[kde-night-color-playback] DBus Message Error: Failed to create uninhibit message.\n");
+			log_message(LogLevel::ERROR, "DBus Message Error: Failed to create uninhibit message.\n");
 			return;
 		}
 
@@ -99,7 +125,7 @@ void inhibit_nc(bool inhibit)
 		{
 			if (!dbus_connection_send(g_dbus_conn, msg, nullptr))
 			{
-				fprintf(stderr, "[kde-night-color-playback] DBus Send Error: Failed to send uninhibit message.\n");
+				log_message(LogLevel::ERROR, "DBus Send Error: Failed to send uninhibit message.\n");
 			}
 			else
 			{
@@ -108,7 +134,7 @@ void inhibit_nc(bool inhibit)
 		}
 		else
 		{
-			fprintf(stderr, "[kde-night-color-playback] DBus Append Args Error: Failed to append arguments for uninhibit. Message not sent.\n");
+			log_message(LogLevel::ERROR, "DBus Append Args Error: Failed to append arguments for uninhibit. Message not sent.\n");
 		}
 		dbus_message_unref(msg);
 	}
@@ -123,6 +149,19 @@ void cleanup_dbus_resources()
 	}
 }
 
+// Helper function to get an mpv property (MPV_FORMAT_FLAG)
+// Returns true on success, false on error (and prints an error message).
+static bool get_mpv_property_flag(mpv_handle *handle, const char *property_name, int *out_value)
+{
+	int err = mpv_get_property(handle, property_name, MPV_FORMAT_FLAG, out_value);
+	if (err != MPV_ERROR_SUCCESS)
+	{
+		log_message(LogLevel::ERROR, "Error getting '%s' property: %s. Skipping update.\n", property_name, mpv_error_string(err));
+		return false;
+	}
+	return true;
+}
+
 extern "C"
 {
 	int mpv_open_cplugin(mpv_handle *handle)
@@ -131,31 +170,16 @@ extern "C"
 
 		auto update_inhibition = [&]()
 		{
-			int paused, idle, seeking, paused_for_cache, err;
+			int paused, idle, seeking, paused_for_cache;
 
-			err = mpv_get_property(handle, "pause", MPV_FORMAT_FLAG, &paused);
-			if (err != MPV_ERROR_SUCCESS) {
-				fprintf(stderr, "[kde-night-color-playback] Error getting 'pause' property: %s. Skipping update.\n", mpv_error_string(err));
+			if (!get_mpv_property_flag(handle, "pause", &paused))
 				return;
-			}
-
-			err = mpv_get_property(handle, "core-idle", MPV_FORMAT_FLAG, &idle);
-			if (err != MPV_ERROR_SUCCESS) {
-				fprintf(stderr, "[kde-night-color-playback] Error getting 'core-idle' property: %s. Skipping update.\n", mpv_error_string(err));
+			if (!get_mpv_property_flag(handle, "core-idle", &idle))
 				return;
-			}
-
-			err = mpv_get_property(handle, "seeking", MPV_FORMAT_FLAG, &seeking);
-			if (err != MPV_ERROR_SUCCESS) {
-				fprintf(stderr, "[kde-night-color-playback] Error getting 'seeking' property: %s. Skipping update.\n", mpv_error_string(err));
+			if (!get_mpv_property_flag(handle, "seeking", &seeking))
 				return;
-			}
-
-			err = mpv_get_property(handle, "paused-for-cache", MPV_FORMAT_FLAG, &paused_for_cache);
-			if (err != MPV_ERROR_SUCCESS) {
-				fprintf(stderr, "[kde-night-color-playback] Error getting 'paused-for-cache' property: %s. Skipping update.\n", mpv_error_string(err));
+			if (!get_mpv_property_flag(handle, "paused-for-cache", &paused_for_cache))
 				return;
-			}
 
 			bool should_inhibit = (!paused && !idle) || paused_for_cache || seeking;
 			if (should_inhibit != night_light_inhibited)
@@ -172,9 +196,8 @@ extern "C"
 			}
 
 			// Add logging of current state
-			printf("[kde-night-color-playback] CurrentState= pause: %d, core-idle: %d, seeking: %d, paused-for-cache: %d, inhibited: %d\n",
-				   paused, idle, seeking, paused_for_cache, night_light_inhibited);
-			fflush(stdout);
+			log_message(LogLevel::INFO, "CurrentState= pause: %d, core-idle: %d, seeking: %d, paused-for-cache: %d, inhibited: %d\n",
+						paused, idle, seeking, paused_for_cache, night_light_inhibited);
 		};
 
 		// Observe properties
