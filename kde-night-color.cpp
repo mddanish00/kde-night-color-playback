@@ -183,6 +183,9 @@ extern "C"
 		mpv_observe_property(handle, 0, "seeking", MPV_FORMAT_FLAG);
 		mpv_observe_property(handle, 0, "paused-for-cache", MPV_FORMAT_FLAG);
 
+		// Call once to set initial state based on current mpv properties
+		update_inhibition();
+
 		while (true)
 		{
 			mpv_event *event = mpv_wait_event(handle, -1); // Blocking wait
