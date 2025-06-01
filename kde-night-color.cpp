@@ -123,6 +123,17 @@ void cleanup_dbus_resources()
 	}
 }
 
+// Helper function to get an mpv property (MPV_FORMAT_FLAG)
+// Returns true on success, false on error (and prints an error message).
+static bool get_mpv_property_flag(mpv_handle *handle, const char *property_name, int *out_value) {
+    int err = mpv_get_property(handle, property_name, MPV_FORMAT_FLAG, out_value);
+    if (err != MPV_ERROR_SUCCESS) {
+        fprintf(stderr, "[kde-night-color-playback] Error getting '%s' property: %s. Skipping update.\n", property_name, mpv_error_string(err));
+        return false;
+    }
+    return true;
+}
+
 extern "C"
 {
 	int mpv_open_cplugin(mpv_handle *handle)
@@ -131,31 +142,12 @@ extern "C"
 
 		auto update_inhibition = [&]()
 		{
-			int paused, idle, seeking, paused_for_cache, err;
+			int paused, idle, seeking, paused_for_cache;
 
-			err = mpv_get_property(handle, "pause", MPV_FORMAT_FLAG, &paused);
-			if (err != MPV_ERROR_SUCCESS) {
-				fprintf(stderr, "[kde-night-color-playback] Error getting 'pause' property: %s. Skipping update.\n", mpv_error_string(err));
-				return;
-			}
-
-			err = mpv_get_property(handle, "core-idle", MPV_FORMAT_FLAG, &idle);
-			if (err != MPV_ERROR_SUCCESS) {
-				fprintf(stderr, "[kde-night-color-playback] Error getting 'core-idle' property: %s. Skipping update.\n", mpv_error_string(err));
-				return;
-			}
-
-			err = mpv_get_property(handle, "seeking", MPV_FORMAT_FLAG, &seeking);
-			if (err != MPV_ERROR_SUCCESS) {
-				fprintf(stderr, "[kde-night-color-playback] Error getting 'seeking' property: %s. Skipping update.\n", mpv_error_string(err));
-				return;
-			}
-
-			err = mpv_get_property(handle, "paused-for-cache", MPV_FORMAT_FLAG, &paused_for_cache);
-			if (err != MPV_ERROR_SUCCESS) {
-				fprintf(stderr, "[kde-night-color-playback] Error getting 'paused-for-cache' property: %s. Skipping update.\n", mpv_error_string(err));
-				return;
-			}
+			if (!get_mpv_property_flag(handle, "pause", &paused)) return;
+			if (!get_mpv_property_flag(handle, "core-idle", &idle)) return;
+			if (!get_mpv_property_flag(handle, "seeking", &seeking)) return;
+			if (!get_mpv_property_flag(handle, "paused-for-cache", &paused_for_cache)) return;
 
 			bool should_inhibit = (!paused && !idle) || paused_for_cache || seeking;
 			if (should_inhibit != night_light_inhibited)
